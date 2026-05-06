@@ -1,0 +1,97 @@
+个人自用的公网直连方案是 nginx + grpc + vmess，服务器禁止连接国内网站和IP，不用websocket的原因是tls in tls特征过于明显,grpc自带mux可以一定程度混淆这种特征，这套方案已经安稳用了4年多了，包括分享给多个朋友使用，每月流量不低于3TB，包括开大会期间没出过任何问题
+
+ 
+
+选线路（决定你的速度和延迟）：按照你的预算找一个你觉得合适的机器，如果你要便宜还要全天速度快，可选的只有欧美精品网，美西的低价的精品网只有搬瓦工/DMIT/Cera这几家上游；如果你要便宜稳定，racknerd这种十刀一年也不是不能用，但是晚上会很难受；如果你要便宜的亚洲直连，无脑选AWS Lightsail 最低$5刀/月，新加坡/日本；亚洲精品网（CN2/9929/CMIN2）能保证你全天满速的成本一般都非常高（因为回国带宽贵），一般不低于200刀/年500G单向流量，小厂商单价低于这个的大概率掺水超卖
+
+
+
+不要用任何一键脚本搭建代理，包括xui/3ui/233boy，小白喜欢把这类面板直接暴露在外网，一扫一个精准打击；233boy已经是TG讨论烂了生成的配置存在特定特征容易被打击的；
+
+代理服务器如果你就一台机器同时处理国内连进来的流量和转发出去的流量，记得屏蔽回国访问；同一台机器同一时间有国内连入的流量和连回国内的流量，从防火墙层面很容易进行离线时序特征关联，这点在过去4-5年的实践上已经充分验证过了，一打一个准
+
+ 
+
+个人vmess服务端配置参考
+
+ 
+
+```json
+
+{
+        "log":{
+                "access":"/var/log/v2ray/access.log",
+                "error":"/var/log/v2ray/error.log",
+                "loglevel":"none"
+        },
+        "inbounds":[
+                 {
+                        "port":10233,
+                        "protocol":"vmess",
+                        "listen":"127.0.0.1",
+                        "settings":{
+                                "clients":[
+                                        {
+                                                "id": "YOUR-UUIDV4-HERE",
+                                                "alterId": 0
+                                        }
+                                ]
+                        },
+                        "streamSettings":{
+                                "network":"grpc",
+                                "grpcSettings": {
+                                        "serviceName": "Example.GRPC.Service.Name"
+                                }
+                        }
+                }
+        ],
+        "outbounds":[
+                {
+                        "tag": "default-out",
+                        "protocol": "freedom",
+                        "settings": {}
+                },
+                {
+                        "tag": "fire",
+                        "protocol": "blackhole",
+                        "settings": {}
+                }
+        ],
+        "routing": {
+                "domainStrategy": "IPOnDemand",
+                "rules": [
+                        {
+                                "type": "field",
+                                "ip": [
+                                        "geoip:private",
+                                        "geoip:cn"
+                                ],
+                                "outboundTag": "fire"
+                        },
+                        {
+                                "type": "field",
+                                "domain": [
+                                        "geosite:cn"
+                                ],
+                                "outboundTag": "fire"
+                        },
+                        {
+                                "type": "field",
+                                "domain": [
+                                        "regexp:(.\\.||)(rfa|boxun|dafahao|minghui|dongtaiwang|epochtimes|ntdtv|falundafa|wujieliulan|zhengjian)\\.(org|com|net)",
+                                        "regexp:(^.\\@)(guerrillamail|guerrillamailblock|sharklasers|grr|pokemail|spam4|bccto|chacuo|027168)\\.(info|biz|com|de|net|org|me|la)",
+                                        "regexp:(api|ps|sv|offnavi|newvector|ulog\\.imap|newloc)(\\.map|)\\.(baidu|n\\.shifen)\\.com",
+                                        "regexp:(.+\\.|^)(360|so)\\.(cn|com)"
+                                ],
+                                "outboundTag": "fire"
+                        },
+                        {
+                                "type": "field",
+                                "inboundTag": ["default"],
+                                "outboundTag": "default-out"
+                        }
+                ]
+        }
+}
+
+```
